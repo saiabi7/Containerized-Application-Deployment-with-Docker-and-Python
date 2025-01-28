@@ -1,10 +1,22 @@
 import docker
 import os
-from docker.errors import APIError, ImageNotFound, NotFound, ContainerError, BuildError
+from docker.errors import APIError, ImageNotFound, NotFound, ContainerError, BuildError  # type: ignore
+from dotenv import load_dotenv  # type: ignore
 
-# Set Docker host
-os.environ["DOCKER_HOST"] = "unix:///var/run/docker.sock"
-print(f"Docker Host: {os.environ['DOCKER_HOST']}")
+# Load environment variables
+load_dotenv()
+
+DOCKER_HOST = os.getenv('DOCKER_HOST')
+CONTAINER_NAME = os.getenv('CONTAINER_NAME')
+IMAGE_NAME = os.getenv('IMAGE_NAME')
+DOCKERFILE_PATH = os.getenv('DOCKERFILE_PATH')
+
+if not all([DOCKER_HOST, CONTAINER_NAME, IMAGE_NAME, DOCKERFILE_PATH]):
+    print("Error: Missing one or more required environment variables (DOCKER_HOST, CONTAINER_NAME, IMAGE_NAME, DOCKERFILE_PATH).")
+    exit(1)
+
+os.environ["DOCKER_HOST"] = DOCKER_HOST
+print(f"Docker Host: {DOCKER_HOST}")
 
 def get_image_list():
     try:
@@ -24,40 +36,37 @@ def get_image_list():
             print(f"CONTAINER ID: {y.short_id}, IMAGE: {y.image.tags}")
 
         # Stop and remove container if it exists
-        container_name = "custom-jenkins"
         try:
-            container = client.containers.get(container_name)
-            print(f"Stopping container {container_name}...")
+            container = client.containers.get(CONTAINER_NAME)
+            print(f"Stopping container {CONTAINER_NAME}...")
             container.stop()
-            print(f"Removing container {container_name}...")
+            print(f"Removing container {CONTAINER_NAME}...")
             container.remove(force=True)
-            print(f"Container {container_name} removed successfully.")
+            print(f"Container {CONTAINER_NAME} removed successfully.")
         except NotFound:
-            print(f"Container {container_name} not found.")
+            print(f"Container {CONTAINER_NAME} not found.")
         except APIError as e:
             print(f"Error removing container: {e}")
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
         # Delete specific image
-        image_name = "custom-jenkins"
         try:
-            client.images.remove(image_name, force=True)
-            print(f"Successfully deleted image: {image_name}")
+            client.images.remove(IMAGE_NAME, force=True)
+            print(f"Successfully deleted image: {IMAGE_NAME}")
         except ImageNotFound:
-            print(f"Image {image_name} not found.")
+            print(f"Image {IMAGE_NAME} not found.")
         except APIError as e:
             print(f"Error deleting image: {e}")
 
         # Build a new Docker image
-        dockerfile_path = "/opt/import"
-        print(f"Building the Docker image from {dockerfile_path}...")
+        print(f"Building the Docker image from {DOCKERFILE_PATH}...")
         try:
-            image, logs = client.images.build(path=dockerfile_path, tag="custom-jenkins:latest")
+            image, logs = client.images.build(path=DOCKERFILE_PATH, tag=f"{IMAGE_NAME}:latest")
             for log in logs:
                 if 'stream' in log:
                     print(log['stream'].strip())
-            print("Image 'custom-jenkins:latest' built successfully.")
+            print(f"Image '{IMAGE_NAME}:latest' built successfully.")
         except BuildError as e:
             print(f"Failed to build the image. Error: {e}")
         except Exception as e:
@@ -65,8 +74,8 @@ def get_image_list():
 
         # Run the container
         try:
-            container = client.containers.run("custom-jenkins:latest", detach=True, name="custom-jenkins")
-            print(f"Container {container_name} is running successfully.")
+            container = client.containers.run(f"{IMAGE_NAME}:latest", detach=True, name=CONTAINER_NAME)
+            print(f"Container {CONTAINER_NAME} is running successfully.")
         except ContainerError as e:
             print(f"Failed to run the container as it exited with a non-zero exit code. Error: {e}")
         except Exception as e:
